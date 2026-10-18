@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DSP Audio & Filter Visualizer Workbench</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            dark: {
+              900: '#0a0d14',
+              800: '#121824',
+              700: '#1e2638',
+              600: '#2a344d',
+            },
+            neon: {
+              cyan: '#00f3ff',
+              amber: '#ffb703',
+              magenta: '#ff007f',
+              green: '#00ff88'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0a0d14;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e2638;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #2a344d;
+    }
+
+    /* Range Slider Styling */
+    input[type=range] {
+      -webkit-appearance: none;
+      background: transparent;
+    }
+    input[type=range]:focus {
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 6px;
+      cursor: pointer;
+      background: #1e2638;
+      border-radius: 3px;
+      border: 1px solid #2a344d;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      height: 16px;
+      width: 16px;
+      border-radius: 50%;
+      background: #00f3ff;
+      cursor: pointer;
+      -webkit-appearance: none;
+      margin-top: -5px;
+      box-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+      transition: transform 0.1s ease, background-color 0.1s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    /* Glowing borders */
+    .glow-cyan {
+      box-shadow: 0 0 15px rgba(0, 243, 255, 0.15);
+    }
+    .glow-amber {
+      box-shadow: 0 0 15px rgba(255, 183, 3, 0.15);
+    }
+
+    /* Glassmorphism */
+    .glass-panel {
+      background: rgba(18, 24, 36, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+  </style>
+</head>
+<body class="bg-dark-900 text-gray-200 font-sans min-h-screen flex flex-col selection:bg-neon-cyan selection:text-black">
+
+  <!-- Header -->
+  <header class="border-b border-gray-800/80 bg-dark-800/60 sticky top-0 z-50 backdrop-blur-md px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-dark-900 font-bold shadow-lg shadow-cyan-500/20">
+          <i class="fa-solid font-mono text-xl">DSP</i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-wide text-white flex items-center gap-2">
+            Signal & Audio Filter Workbench
+            <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">Real-time WebAudio</span>
+          </h1>
+          <p class="text-xs text-gray-400">Interactive Digital Signal Processing Analysis System</p>
+        </div>
+      </div>
+
+      <!-- Master Controls & Audio Context Power Switch -->
+      <div class="flex items-center space-x-3">
+        <button id="power-btn" class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-dark-900 font-semibold text-sm transition-all duration-200 flex items-center gap-2 shadow-lg shadow-emerald-500/20">
+          <i class="fa-solid fa-power-off"></i>
+          <span>Start Audio Engine</span>
+        </button>
+
+        <div class="h-6 w-[1px] bg-gray-800"></div>
+
+        <button id="bypass-btn" disabled class="px-4 py-2 rounded-lg bg-dark-700 hover:bg-dark-600 text-gray-300 font-medium text-sm transition-all border border-gray-700/60 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i class="fa-solid fa-code-compare text-amber-400"></i>
+          <span>Filter Status: <strong id="bypass-status" class="text-cyan-400">ACTIVE</strong></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN: Audio Controls & Filter Settings (5 cols) -->
+    <div class="lg:col-span-5 flex flex-col space-y-6">
+      
+      <!-- Audio Source Selection -->
+      <section class="glass-panel rounded-2xl p-5 border border-gray-800">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-cyan-400"></i> 1. Audio Source
+        </h2>
+
+        <div class="grid grid-cols-3 gap-2 mb-4">
+          <button id="src-gen-btn" class="src-tab-btn active px-3 py-2 rounded-xl text-xs font-medium border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 flex flex-col items-center gap-1 transition-all">
+            <i class="fa-solid fa-wave-square text-base"></i>
+            <span>Synthetic Gen</span>
+          </button>
+          <button id="src-mic-btn" class="src-tab-btn px-3 py-2 rounded-xl text-xs font-medium border border-gray-800 bg-dark-800 text-gray-400 hover:bg-dark-700 flex flex-col items-center gap-1 transition-all">
+            <i class="fa-solid fa-microphone text-base"></i>
+            <span>Microphone</span>
+          </button>
+          <button id="src-file-btn" class="src-tab-btn px-3 py-2 rounded-xl text-xs font-medium border border-gray-800 bg-dark-800 text-gray-400 hover:bg-dark-700 flex flex-col items-center gap-1 transition-all">
+            <i class="fa-solid fa-file-audio text-base"></i>
+            <span>Audio File</span>
+          </button>
+        </div>
+
+        <!-- Source Panel 1: Generator Controls -->
+        <div id="panel-src-gen" class="space-y-3 bg-dark-900/60 p-4 rounded-xl border border-gray-800/80">
+          <div class="flex items-center justify-between text-xs text-gray-300">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="gen-tone1" checked class="rounded bg-dark-800 border-gray-700 text-cyan-500 focus:ring-0">
+              <span>Low Fundamental Tone (220 Hz)</span>
+            </label>
+          </div>
+          <div class="flex items-center justify-between text-xs text-gray-300">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="gen-tone2" checked class="rounded bg-dark-800 border-gray-700 text-cyan-500 focus:ring-0">
+              <span>Mid/Hum Interference (1000 Hz)</span>
+            </label>
+          </div>
+          <div class="flex items-center justify-between text-xs text-gray-300">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="gen-tone3" checked class="rounded bg-dark-800 border-gray-700 text-cyan-500 focus:ring-0">
+              <span>High Frequency Noise (4000 Hz)</span>
+            </label>
+          </div>
+          <div class="flex items-center justify-between text-xs text-gray-300">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="gen-noise" class="rounded bg-dark-800 border-gray-700 text-cyan-500 focus:ring-0">
+              <span>Broadband White Noise</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Source Panel 2: Microphone -->
+        <div id="panel-src-mic" class="hidden space-y-3 bg-dark-900/60 p-4 rounded-xl border border-gray-800/80 text-center">
+          <p class="text-xs text-gray-400">Stream audio live from your local hardware microphone to process speech or room acoustics.</p>
+          <button id="mic-perm-btn" class="px-3 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-xs text-cyan-300 border border-gray-700">
+            Enable Microphone Access
+          </button>
+        </div>
+
+        <!-- Source Panel 3: Audio File Upload -->
+        <div id="panel-src-file" class="hidden space-y-3 bg-dark-900/60 p-4 rounded-xl border border-gray-800/80">
+          <input type="file" id="audio-file-input" accept="audio/*" class="block w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-950 file:text-cyan-300 hover:file:bg-cyan-900 cursor-pointer">
+          <div id="file-info" class="text-xs text-gray-400 truncate">No file loaded</div>
+          <div class="flex items-center gap-2 pt-1">
+            <button id="file-play-btn" disabled class="px-3 py-1 rounded bg-cyan-500 text-dark-900 font-bold text-xs disabled:opacity-40">Play</button>
+            <button id="file-pause-btn" disabled class="px-3 py-1 rounded bg-dark-700 text-gray-300 text-xs disabled:opacity-40">Pause</button>
+            <label class="flex items-center gap-1.5 text-xs text-gray-400 ml-auto cursor-pointer">
+              <input type="checkbox" id="file-loop" checked class="rounded bg-dark-800 border-gray-700 text-cyan-500"> Loop
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Filter Controls -->
+      <section class="glass-panel rounded-2xl p-5 border border-gray-800 flex-1 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+              <i class="fa-solid fa-filter text-cyan-400"></i> 2. Filter Parameters
+            </h2>
+            <span id="filter-type-badge" class="font-mono text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">LOWPASS</span>
+          </div>
+
+          <!-- Presets Dropdown -->
+          <div class="mb-5">
+            <label class="block text-xs text-gray-400 mb-1">Quick Presets:</label>
+            <select id="preset-select" class="w-full bg-dark-900 border border-gray-700 rounded-xl text-xs text-gray-200 p-2.5 focus:border-cyan-500 focus:outline-none">
+              <option value="custom">-- Custom Settings --</option>
+              <option value="hum">Remove 1000Hz Line Interference (Notch Filter)</option>
+              <option value="bass-boost">Bass Booster (Low-Pass Filter)</option>
+              <option value="treble-cut">High-Frequency Cutoff (Low-Pass Filter)</option>
+              <option value="voice-isolate">Speech Isolation (Band-Pass Filter)</option>
+              <option value="high-pass-hum">Sub-Bass Rumble Removal (High-Pass Filter)</option>
+            </select>
+          </div>
+
+          <!-- Filter Type Buttons -->
+          <div class="grid grid-cols-2 gap-2 mb-6">
+            <button data-type="lowpass" class="filter-type-btn active px-3 py-2 rounded-xl text-xs font-mono border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 text-left transition-all">
+              <div class="font-bold">LOW-PASS (LPF)</div>
+              <div class="text-[10px] text-gray-400 font-sans">Passes frequencies below cutoff</div>
+            </button>
+            <button data-type="highpass" class="filter-type-btn px-3 py-2 rounded-xl text-xs font-mono border border-gray-800 bg-dark-800 text-gray-400 hover:bg-dark-700 text-left transition-all">
+              <div class="font-bold">HIGH-PASS (HPF)</div>
+              <div class="text-[10px] text-gray-400 font-sans">Passes frequencies above cutoff</div>
+            </button>
+            <button data-type="bandpass" class="filter-type-btn px-3 py-2 rounded-xl text-xs font-mono border border-gray-800 bg-dark-800 text-gray-400 hover:bg-dark-700 text-left transition-all">
+              <div class="font-bold">BAND-PASS (BPF)</div>
+              <div class="text-[10px] text-gray-400 font-sans">Passes a frequency band</div>
+            </button>
+            <button data-type="notch" class="filter-type-btn px-3 py-2 rounded-xl text-xs font-mono border border-gray-800 bg-dark-800 text-gray-400 hover:bg-dark-700 text-left transition-all">
+              <div class="font-bold">NOTCH / BAND-STOP</div>
+              <div class="text-[10px] text-gray-400 font-sans">Attenuates narrow frequency</div>
+            </button>
+          </div>
+
+          <!-- Interactive Sliders -->
+          <div class="space-y-4">
+            <!-- Cutoff Frequency -->
+            <div>
+              <div class="flex justify-between items-center text-xs mb-1">
+                <span class="text-gray-300 font-medium">Cutoff / Center Frequency</span>
+                <span class="font-mono text-cyan-400 font-semibold" id="cutoff-val">1000 Hz</span>
+              </div>
+              <input type="range" id="cutoff-slider" min="20" max="20000" value="1000" step="1" class="w-full">
+              <div class="flex justify-between text-[10px] text-gray-500 font-mono mt-0.5">
+                <span>20 Hz</span>
+                <span>1 kHz</span>
+                <span>20 kHz</span>
+              </div>
+            </div>
+
+            <!-- Quality Factor (Q) -->
+            <div>
+              <div class="flex justify-between items-center text-xs mb-1">
+                <span class="text-gray-300 font-medium">Quality Factor (Q)</span>
+                <span class="font-mono text-cyan-400 font-semibold" id="q-val">1.0</span>
+              </div>
+              <input type="range" id="q-slider" min="0.1" max="30" value="1" step="0.1" class="w-full">
+              <div class="flex justify-between text-[10px] text-gray-500 font-mono mt-0.5">
+                <span>0.1 (Broad)</span>
+                <span>30.0 (Sharp)</span>
+              </div>
+            </div>
+
+            <!-- Filter Gain -->
+            <div id="gain-container" class="opacity-50">
+              <div class="flex justify-between items-center text-xs mb-1">
+                <span class="text-gray-300 font-medium">Peaking / Shelf Gain</span>
+                <span class="font-mono text-cyan-400 font-semibold" id="gain-val">0 dB</span>
+              </div>
+              <input type="range" id="gain-slider" min="-24" max="24" value="0" step="0.5" disabled class="w-full">
+              <div class="flex justify-between text-[10px] text-gray-500 font-mono mt-0.5">
+                <span>-24 dB</span>
+                <span>0 dB</span>
+                <span>+24 dB</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter Theory Info Box -->
+        <div class="mt-6 p-3.5 rounded-xl bg-dark-900/80 border border-gray-800 text-xs text-gray-400 space-y-1">
+          <div class="font-semibold text-gray-300 flex items-center gap-1.5">
+            <i class="fa-solid fa-circle-info text-cyan-400"></i> Signal Concept:
+          </div>
+          <p id="filter-desc" class="text-[11px] leading-relaxed text-gray-400">
+            A Low-Pass Filter allows low-frequency signals to pass through while attenuating (reducing) frequencies above the cutoff point. High Q factors create a resonant peak at the cutoff point.
+          </p>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- RIGHT COLUMN: Real-Time Visualizations (7 cols) -->
+    <div class="lg:col-span-7 flex flex-col space-y-6">
+      
+      <!-- Bode Plot (Interactive Frequency Response) -->
+      <section class="glass-panel rounded-2xl p-5 border border-gray-800 relative">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+            <i class="fa-solid fa-chart-line text-cyan-400"></i> Theoretical Frequency Response (Bode Plot)
+          </h3>
+          <span class="text-[10px] font-mono text-gray-500">20Hz - 20kHz Log Scale</span>
+        </div>
+        <div class="relative w-full h-44 bg-dark-900 rounded-xl overflow-hidden border border-gray-800">
+          <canvas id="bode-canvas" class="w-full h-full block"></canvas>
+        </div>
+      </section>
+
+      <!-- Spectrum Analyzer (Frequency Domain FFT) -->
+      <section class="glass-panel rounded-2xl p-5 border border-gray-800">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+            <i class="fa-solid fa-chart-simple text-cyan-400"></i> Real-Time Spectrum Analyzer (FFT)
+          </h3>
+          <div class="flex items-center gap-3 text-[11px] font-mono">
+            <span class="flex items-center gap-1 text-amber-400"><span class="w-2 h-2 rounded-full bg-amber-400"></span> Input Raw</span>
+            <span class="flex items-center gap-1 text-cyan-400"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> Filtered Output</span>
+          </div>
+        </div>
+        <div class="relative w-full h-48 bg-dark-900 rounded-xl overflow-hidden border border-gray-800">
+          <canvas id="fft-canvas" class="w-full h-full block"></canvas>
+        </div>
+      </section>
+
+      <!-- Oscilloscope (Time Domain Waveform) -->
+      <section class="glass-panel rounded-2xl p-5 border border-gray-800">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+            <i class="fa-solid fa-microchip text-cyan-400"></i> Oscilloscope (Time-Domain Waveform)
+          </h3>
+          <div class="flex items-center gap-3 text-[11px] font-mono">
+            <span class="flex items-center gap-1 text-amber-400"><span class="w-2 h-2 rounded-full bg-amber-400"></span> Input Wave</span>
+            <span class="flex items-center gap-1 text-cyan-400"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> Filtered Wave</span>
+          </div>
+        </div>
+        <div class="relative w-full h-48 bg-dark-900 rounded-xl overflow-hidden border border-gray-800">
+          <canvas id="scope-canvas" class="w-full h-full block"></canvas>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- JavaScript Engine -->
+  <script>
+    // --- Application State & Web Audio Nodes ---
+    let audioCtx = null;
+    let isRunning = false;
+    let isBypassed = false;
+    let currentSourceType = 'gen'; // 'gen', 'mic', 'file'
+
+    // Audio Nodes
+    let synthOsc1 = null, synthOsc2 = null, synthOsc3 = null, noiseNode = null;
+    let synthGain = null;
+    let micStream = null, micSourceNode = null;
+    let audioFileElement = null, fileSourceNode = null;
+
+    let inputNode = null;      // Common input collector
+    let filterNode = null;     // WebAudio BiquadFilterNode
+    let bypassGain = null;     // For clean bypass switching
+    let filterGain = null;
+    let outputNode = null;     // Master destination
+
+    // Analyzers
+    let rawAnalyzer = null;
+    let filteredAnalyzer = null;
+
+    // Filter Descriptions
+    const filterDescriptions = {
+      lowpass: "A Low-Pass Filter (LPF) allows frequencies lower than the cutoff frequency to pass through while attenuating higher frequencies. Ideal for removing treble noise, hiss, or isolating bass fundamentals.",
+      highpass: "A High-Pass Filter (HPF) attenuates frequencies below the cutoff frequency while letting higher frequencies pass. Excellent for eliminating sub-bass rumble, mechanical hum, and DC offsets.",
+      bandpass: "A Band-Pass Filter (BPF) passes frequencies within a designated frequency band around the cutoff and attenuates frequencies outside it. Commonly used for voice isolation or spectral band extraction.",
+      notch: "A Notch (or Band-Stop) Filter severely attenuates a very specific narrow band of frequencies while leaving all others intact. Perfect for removing precise line hum (e.g., 50/60Hz or 1000Hz interference).",
+      peaking: "A Peaking filter boosts or cuts a specific band of frequencies with adjustable gain.",
+      lowshelf: "A Low-Shelf filter boosts or cuts all frequencies below the specified cutoff frequency.",
+      highshelf: "A High-Shelf filter boosts or cuts all frequencies above the specified cutoff frequency."
+    };
+
+    // DOM Elements
+    const powerBtn = document.getElementById('power-btn');
+    const bypassBtn = document.getElementById('bypass-btn');
+    const bypassStatus = document.getElementById('bypass-status');
+
+    const cutoffSlider = document.getElementById('cutoff-slider');
+    const cutoffVal = document.getElementById('cutoff-val');
+    const qSlider = document.getElementById('q-slider');
+    const qVal = document.getElementById('q-val');
+    const gainSlider = document.getElementById('gain-slider');
+    const gainVal = document.getElementById('gain-val');
+    const gainContainer = document.getElementById('gain-container');
+
+    const filterBadge = document.getElementById('filter-type-badge');
+    const filterDesc = document.getElementById('filter-desc');
+    const presetSelect = document.getElementById('preset-select');
+
+    // Canvases
+    const bodeCanvas = document.getElementById('bode-canvas');
+    const fftCanvas = document.getElementById('fft-canvas');
+    const scopeCanvas = document.getElementById('scope-canvas');
+
+    const bodeCtx = bodeCanvas.getContext('2d');
+    const fftCtx = fftCanvas.getContext('2d');
+    const scopeCtx = scopeCanvas.getContext('2d');
+
+    // --- Resizing Canvases Responsively ---
+    function resizeCanvases() {
+      [bodeCanvas, fftCanvas, scopeCanvas].forEach(canvas => {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio || rect.width;
+        canvas.height = rect.height * window.devicePixelRatio || rect.height;
+      });
+      drawBodePlot();
+    }
+    window.addEventListener('resize', resizeCanvases);
+
+    // --- Audio System Initialization ---
+    function initAudio() {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContext();
+
+      // Master Input & Output
+      inputNode = audioCtx.createGain();
+      outputNode = audioCtx.createGain();
+
+      // Filter Setup
+      filterNode = audioCtx.createBiquadFilter();
+      filterNode.type = 'lowpass';
+      filterNode.frequency.value = parseFloat(cutoffSlider.value);
+      filterNode.Q.value = parseFloat(qSlider.value);
+      filterNode.gain.value = parseFloat(gainSlider.value);
+
+      // Bypass Routing Setup
+      bypassGain = audioCtx.createGain();
+      filterGain = audioCtx.createGain();
+      
+      bypassGain.gain.value = 0; // Off initially
+      filterGain.gain.value = 1; // Active initially
+
+      // Analyzers
+      rawAnalyzer = audioCtx.createAnalyser();
+      rawAnalyzer.fftSize = 2048;
+      rawAnalyzer.smoothingTimeConstant = 0.8;
+
+      filteredAnalyzer = audioCtx.createAnalyser();
+      filteredAnalyzer.fftSize = 2048;
+      filteredAnalyzer.smoothingTimeConstant = 0.8;
+
+      // Connections:
+      // inputNode -> rawAnalyzer
+      // inputNode -> filterNode -> filterGain -> filteredAnalyzer -> outputNode
+      // inputNode -> bypassGain -> outputNode
+      inputNode.connect(rawAnalyzer);
+
+      inputNode.connect(filterNode);
+      filterNode.connect(filterGain);
+      filterGain.connect(filteredAnalyzer);
+      filteredAnalyzer.connect(outputNode);
+
+      inputNode.connect(bypassGain);
+      bypassGain.connect(outputNode);
+
+      outputNode.connect(audioCtx.destination);
+
+      // Start Default Audio Generator
+      setupSynthGenerator();
+    }
+
+    // --- Synthetic Audio Generator ---
+    function setupSynthGenerator() {
+      if (!audioCtx) return;
+
+      stopSynthGenerator();
+
+      synthGain = audioCtx.createGain();
+      synthGain.gain.value = 0.25;
+
+      const t1Checked = document.getElementById('gen-tone1').checked;
+      const t2Checked = document.getElementById('gen-tone2').checked;
+      const t3Checked = document.getElementById('gen-tone3').checked;
+      const noiseChecked = document.getElementById('gen-noise').checked;
+
+      if (t1Checked) {
+        synthOsc1 = audioCtx.createOscillator();
+        synthOsc1.type = 'sine';
+        synthOsc1.frequency.value = 220; // Low Fundamental
+        synthOsc1.connect(synthGain);
+        synthOsc1.start();
+      }
+
+      if (t2Checked) {
+        synthOsc2 = audioCtx.createOscillator();
+        synthOsc2.type = 'triangle';
+        synthOsc2.frequency.value = 1000; // Mid Interference
+        synthOsc2.connect(synthGain);
+        synthOsc2.start();
+      }
+
+      if (t3Checked) {
+        synthOsc3 = audioCtx.createOscillator();
+        synthOsc3.type = 'sawtooth';
+        synthOsc3.frequency.value = 4000; // High Noise
+        synthOsc3.connect(synthGain);
+        synthOsc3.start();
+      }
+
+      if (noiseChecked) {
+        const bufferSize = audioCtx.sampleRate * 2;
+        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1;
+        }
+        noiseNode = audioCtx.createBufferSource();
+        noiseNode.buffer = noiseBuffer;
+        noiseNode.loop = true;
+
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.value = 0.15;
+        noiseNode.connect(noiseGain);
+        noiseGain.connect(synthGain);
+        noiseNode.start();
+      }
+
+      synthGain.connect(inputNode);
+    }
+
+    function stopSynthGenerator() {
+      if (synthOsc1) { synthOsc1.stop(); synthOsc1.disconnect(); synthOsc1 = null; }
+      if (synthOsc2) { synthOsc2.stop(); synthOsc2.disconnect(); synthOsc2 = null; }
+      if (synthOsc3) { synthOsc3.stop(); synthOsc3.disconnect(); synthOsc3 = null; }
+      if (noiseNode) { noiseNode.stop(); noiseNode.disconnect(); noiseNode = null; }
+      if (synthGain) { synthGain.disconnect(); synthGain = null; }
+    }
+
+    // --- Microphone Source ---
+    async function setupMicrophone() {
+      if (!audioCtx) return;
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        micSourceNode = audioCtx.createMediaStreamSource(micStream);
+        micSourceNode.connect(inputNode);
+        document.getElementById('mic-perm-btn').textContent = "Microphone Active";
+        document.getElementById('mic-perm-btn').classList.replace('bg-dark-700', 'bg-emerald-950');
+        document.getElementById('mic-perm-btn').classList.add('text-emerald-400', 'border-emerald-800');
+      } catch (err) {
+        alert("Could not access microphone: " + err.message);
+      }
+    }
+
+    function stopMicrophone() {
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
+      }
+      if (micSourceNode) {
+        micSourceNode.disconnect();
+        micSourceNode = null;
+      }
+      document.getElementById('mic-perm-btn').textContent = "Enable Microphone Access";
+      document.getElementById('mic-perm-btn').className = "px-3 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-xs text-cyan-300 border border-gray-700";
+    }
+
+    // --- Audio File Source ---
+    function setupAudioFile(file) {
+      if (!audioCtx) return;
+
+      if (!audioFileElement) {
+        audioFileElement = new Audio();
+        audioFileElement.loop = document.getElementById('file-loop').checked;
+      }
+      
+      const fileURL = URL.createObjectURL(file);
+      audioFileElement.src = fileURL;
+
+      if (!fileSourceNode) {
+        fileSourceNode = audioCtx.createMediaElementSource(audioFileElement);
+        fileSourceNode.connect(inputNode);
+      }
+
+      document.getElementById('file-info').textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+      document.getElementById('file-play-btn').disabled = false;
+      document.getElementById('file-pause-btn').disabled = false;
+    }
+
+    function stopAudioFile() {
+      if (audioFileElement) {
+        audioFileElement.pause();
+      }
+    }
+
+    // --- Source Switcher ---
+    function switchSource(type) {
+      currentSourceType = type;
+
+      // Disconnect all
+      stopSynthGenerator();
+      stopMicrophone();
+      stopAudioFile();
+
+      // UI Tab update
+      document.querySelectorAll('.src-tab-btn').forEach(btn => {
+        btn.classList.remove('active', 'border-cyan-500/40', 'bg-cyan-950/40', 'text-cyan-300');
+        btn.classList.add('border-gray-800', 'bg-dark-800', 'text-gray-400');
+      });
+
+      document.getElementById('panel-src-gen').classList.add('hidden');
+      document.getElementById('panel-src-mic').classList.add('hidden');
+      document.getElementById('panel-src-file').classList.add('hidden');
+
+      if (type === 'gen') {
+        document.getElementById('src-gen-btn').classList.add('active', 'border-cyan-500/40', 'bg-cyan-950/40', 'text-cyan-300');
+        document.getElementById('panel-src-gen').classList.remove('hidden');
+        if (isRunning) setupSynthGenerator();
+      } else if (type === 'mic') {
+        document.getElementById('src-mic-btn').classList.add('active', 'border-cyan-500/40', 'bg-cyan-950/40', 'text-cyan-300');
+        document.getElementById('panel-src-mic').classList.remove('hidden');
+        if (isRunning) setupMicrophone();
+      } else if (type === 'file') {
+        document.getElementById('src-file-btn').classList.add('active', 'border-cyan-500/40', 'bg-cyan-950/40', 'text-cyan-300');
+        document.getElementById('panel-src-file').classList.remove('hidden');
+      }
+    }
+
+    // --- Filter Parameter Updates ---
+    function updateFilterParams() {
+      if (!filterNode) return;
+
+      const freq = parseFloat(cutoffSlider.value);
+      const q = parseFloat(qSlider.value);
+      const gain = parseFloat(gainSlider.value);
+
+      filterNode.frequency.setTargetAtTime(freq, audioCtx ? audioCtx.currentTime : 0, 0.01);
+      filterNode.Q.setTargetAtTime(q, audioCtx ? audioCtx.currentTime : 0, 0.01);
+      filterNode.gain.setTargetAtTime(gain, audioCtx ? audioCtx.currentTime : 0, 0.01);
+
+      cutoffVal.textContent = freq >= 1000 ? `${(freq / 1000).toFixed(1)} kHz` : `${Math.round(freq)} Hz`;
+      qVal.textContent = q.toFixed(1);
+      gainVal.textContent = `${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB`;
+
+      drawBodePlot();
+    }
+
+    function setFilterType(type) {
+      if (filterNode) {
+        filterNode.type = type;
+      }
+      filterBadge.textContent = type.toUpperCase();
+      filterDesc.textContent = filterDescriptions[type] || "Custom filter mode";
+
+      // Enable gain slider only for peaking/shelving
+      if (['peaking', 'lowshelf', 'highshelf'].includes(type)) {
+        gainSlider.disabled = false;
+        gainContainer.classList.remove('opacity-50');
+      } else {
+        gainSlider.disabled = true;
+        gainContainer.classList.add('opacity-50');
+      }
+
+      document.querySelectorAll('.filter-type-btn').forEach(btn => {
+        if (btn.dataset.type === type) {
+          btn.classList.add('active', 'border-cyan-500/40', 'bg-cyan-950/40', 'text-cyan-300');
+          btn.classList.remove('border-gray-800', 'bg-dark-800', 'text-gray-400');
+        } else {
+          btn.classList.remove('active', 'border-cyan-500/40', 'bg-cyan-950/40', 'text-cyan-300');
+          btn.classList.add('border-gray-800', 'bg-dark-800', 'text-gray-400');
+        }
+      });
+
+      updateFilterParams();
+    }
+
+    // --- Presets ---
+    function applyPreset(preset) {
+      if (preset === 'hum') {
+        setFilterType('notch');
+        cutoffSlider.value = 1000;
+        qSlider.value = 15;
+      } else if (preset === 'bass-boost') {
+        setFilterType('lowpass');
+        cutoffSlider.value = 300;
+        qSlider.value = 2.0;
+      } else if (preset === 'treble-cut') {
+        setFilterType('lowpass');
+        cutoffSlider.value = 1200;
+        qSlider.value = 0.7;
+      } else if (preset === 'voice-isolate') {
+        setFilterType('bandpass');
+        cutoffSlider.value = 1500;
+        qSlider.value = 3.0;
+      } else if (preset === 'high-pass-hum') {
+        setFilterType('highpass');
+        cutoffSlider.value = 150;
+        qSlider.value = 1.0;
+      }
+      updateFilterParams();
+    }
+
+    // --- Visualization: Bode Plot (Filter Frequency Response) ---
+    function drawBodePlot() {
+      const width = bodeCanvas.width;
+      const height = bodeCanvas.height;
+
+      bodeCtx.clearRect(0, 0, width, height);
+
+      // Background Grid
+      bodeCtx.strokeStyle = '#1e2638';
+      bodeCtx.lineWidth = 1;
+
+      // Frequency Grid lines (Logarithmic)
+      const freqsToDraw = [100, 500, 1000, 5000, 10000];
+      freqsToDraw.forEach(f => {
+        const x = frequencyToX(f, width);
+        bodeCtx.beginPath();
+        bodeCtx.moveTo(x, 0);
+        bodeCtx.lineTo(x, height);
+        bodeCtx.stroke();
+
+        bodeCtx.fillStyle = '#4a5568';
+        bodeCtx.font = '10px JetBrains Mono';
+        bodeCtx.fillText(f >= 1000 ? `${f / 1000}k` : f, x + 2, height - 6);
+      });
+
+      // dB Horizontal Grid lines (+24dB to -36dB)
+      const dbLines = [20, 0, -20, -40];
+      dbLines.forEach(db => {
+        const y = dbToY(db, height);
+        bodeCtx.beginPath();
+        bodeCtx.moveTo(0, y);
+        bodeCtx.lineTo(width, y);
+        bodeCtx.stroke();
+
+        bodeCtx.fillStyle = '#4a5568';
+        bodeCtx.font = '10px JetBrains Mono';
+        bodeCtx.fillText(`${db}dB`, 5, y - 2);
+      });
+
+      // Calculate Frequency Response Array
+      const numPoints = 250;
+      const frequencyHz = new Float32Array(numPoints);
+      const magResponse = new Float32Array(numPoints);
+      const phaseResponse = new Float32Array(numPoints);
+
+      for (let i = 0; i < numPoints; i++) {
+        // Logarithmic scale from 20Hz to 20000Hz
+        const logMin = Math.log10(20);
+        const logMax = Math.log10(20000);
+        const freq = Math.pow(10, logMin + (i / (numPoints - 1)) * (logMax - logMin));
+        frequencyHz[i] = freq;
+      }
+
+      if (filterNode && audioCtx) {
+        filterNode.getFrequencyResponse(frequencyHz, magResponse, phaseResponse);
+      } else {
+        // Fallback offline calculation if audioCtx not active yet
+        const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const tempFilter = tempCtx.createBiquadFilter();
+        tempFilter.type = filterNode ? filterNode.type : 'lowpass';
+        tempFilter.frequency.value = parseFloat(cutoffSlider.value);
+        tempFilter.Q.value = parseFloat(qSlider.value);
+        tempFilter.gain.value = parseFloat(gainSlider.value);
+        tempFilter.getFrequencyResponse(frequencyHz, magResponse, phaseResponse);
+        tempCtx.close();
+      }
+
+      // Draw Curve
+      bodeCtx.beginPath();
+      bodeCtx.strokeStyle = '#00f3ff';
+      bodeCtx.lineWidth = 2.5;
+
+      for (let i = 0; i < numPoints; i++) {
+        const x = frequencyToX(frequencyHz[i], width);
+        const db = 20 * Math.log10(magResponse[i]);
+        const y = dbToY(db, height);
+
+        if (i === 0) bodeCtx.moveTo(x, y);
+        else bodeCtx.lineTo(x, y);
+      }
+      bodeCtx.stroke();
+
+      // Glow Effect
+      bodeCtx.shadowColor = 'rgba(0, 243, 255, 0.4)';
+      bodeCtx.shadowBlur = 8;
+      bodeCtx.stroke();
+      bodeCtx.shadowBlur = 0; // reset
+    }
+
+    function frequencyToX(freq, width) {
+      const logMin = Math.log10(20);
+      const logMax = Math.log10(20000);
+      return ((Math.log10(freq) - logMin) / (logMax - logMin)) * width;
+    }
+
+    function dbToY(db, height) {
+      // Scale from +24 dB (top = 0) to -40 dB (bottom = height)
+      const minDb = -40;
+      const maxDb = 24;
+      const clamped = Math.max(minDb, Math.min(maxDb, db));
+      return height - ((clamped - minDb) / (maxDb - minDb)) * height;
+    }
+
+    // --- Visualization: Real-time FFT Spectrum Analyzer ---
+    function drawFFT() {
+      const width = fftCanvas.width;
+      const height = fftCanvas.height;
+
+      fftCtx.clearRect(0, 0, width, height);
+
+      if (!isRunning) {
+        requestAnimationFrame(drawFFT);
+        return;
+      }
+
+      const bufferLength = rawAnalyzer.frequencyBinCount;
+      const rawData = new Uint8Array(bufferLength);
+      const filteredData = new Uint8Array(bufferLength);
+
+      rawAnalyzer.getByteFrequencyData(rawData);
+      filteredAnalyzer.getByteFrequencyData(filteredData);
+
+      const barWidth = (width / bufferLength) * 2.5;
+      let x = 0;
+
+      // Draw Raw Spectrum (Amber Fill)
+      fftCtx.fillStyle = 'rgba(255, 183, 3, 0.35)';
+      for (let i = 0; i < bufferLength; i++) {
+        const barHeight = (rawData[i] / 255) * height;
+        fftCtx.fillRect(x, height - barHeight, barWidth, barHeight);
+        x += barWidth + 1;
+      }
+
+      // Draw Filtered Spectrum (Cyan Overlay Line)
+      fftCtx.beginPath();
+      fftCtx.strokeStyle = '#00f3ff';
+      fftCtx.lineWidth = 2;
+      x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const barHeight = (filteredData[i] / 255) * height;
+        const y = height - barHeight;
+
+        if (i === 0) fftCtx.moveTo(x, y);
+        else fftCtx.lineTo(x, y);
+
+        x += barWidth + 1;
+      }
+      fftCtx.stroke();
+
+      requestAnimationFrame(drawFFT);
+    }
+
+    // --- Visualization: Oscilloscope (Time-Domain Waveform) ---
+    function drawScope() {
+      const width = scopeCanvas.width;
+      const height = scopeCanvas.height;
+
+      scopeCtx.clearRect(0, 0, width, height);
+
+      if (!isRunning) {
+        requestAnimationFrame(drawScope);
+        return;
+      }
+
+      const bufferLength = rawAnalyzer.fftSize;
+      const rawTimeData = new Float32Array(bufferLength);
+      const filteredTimeData = new Float32Array(bufferLength);
+
+      rawAnalyzer.getFloatTimeDomainData(rawTimeData);
+      filteredAnalyzer.getFloatTimeDomainData(filteredTimeData);
+
+      // Center Line
+      scopeCtx.strokeStyle = '#1e2638';
+      scopeCtx.lineWidth = 1;
+      scopeCtx.beginPath();
+      scopeCtx.moveTo(0, height / 2);
+      scopeCtx.lineTo(width, height / 2);
+      scopeCtx.stroke();
+
+      const sliceWidth = width / bufferLength;
+
+      // 1. Draw Raw Time Domain Waveform (Amber)
+      scopeCtx.beginPath();
+      scopeCtx.strokeStyle = 'rgba(255, 183, 3, 0.6)';
+      scopeCtx.lineWidth = 1.5;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = rawTimeData[i];
+        const y = (v + 1) * (height / 2);
+
+        if (i === 0) scopeCtx.moveTo(x, y);
+        else scopeCtx.lineTo(x, y);
+
+        x += sliceWidth;
+      }
+      scopeCtx.stroke();
+
+      // 2. Draw Filtered Waveform (Cyan)
+      scopeCtx.beginPath();
+      scopeCtx.strokeStyle = '#00f3ff';
+      scopeCtx.lineWidth = 2;
+      x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = filteredTimeData[i];
+        const y = (v + 1) * (height / 2);
+
+        if (i === 0) scopeCtx.moveTo(x, y);
+        else scopeCtx.lineTo(x, y);
+
+        x += sliceWidth;
+      }
+      scopeCtx.stroke();
+
+      requestAnimationFrame(drawScope);
+    }
+
+    // --- Event Listeners & Power Control ---
+    powerBtn.addEventListener('click', () => {
+      if (!isRunning) {
+        if (!audioCtx) initAudio();
+        else audioCtx.resume();
+
+        isRunning = true;
+        powerBtn.classList.replace('bg-emerald-500', 'bg-rose-500');
+        powerBtn.classList.replace('hover:bg-emerald-400', 'hover:bg-rose-400');
+        powerBtn.classList.replace('shadow-emerald-500/20', 'shadow-rose-500/20');
+        powerBtn.querySelector('span').textContent = "Stop Audio Engine";
+        bypassBtn.disabled = false;
+
+        // Activate Current Source
+        switchSource(currentSourceType);
+      } else {
+        if (audioCtx) audioCtx.suspend();
+        isRunning = false;
+        powerBtn.classList.replace('bg-rose-500', 'bg-emerald-500');
+        powerBtn.classList.replace('hover:bg-rose-400', 'hover:bg-emerald-400');
+        powerBtn.classList.replace('shadow-rose-500/20', 'shadow-emerald-500/20');
+        powerBtn.querySelector('span').textContent = "Start Audio Engine";
+        bypassBtn.disabled = true;
+
+        stopSynthGenerator();
+        stopMicrophone();
+        stopAudioFile();
+      }
+    });
+
+    // Bypass Switch
+    bypassBtn.addEventListener('click', () => {
+      isBypassed = !isBypassed;
+      if (isBypassed) {
+        filterGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        bypassGain.gain.setValueAtTime(1, audioCtx.currentTime);
+        bypassStatus.textContent = "BYPASSED";
+        bypassStatus.classList.replace('text-cyan-400', 'text-amber-400');
+      } else {
+        filterGain.gain.setValueAtTime(1, audioCtx.currentTime);
+        bypassGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        bypassStatus.textContent = "ACTIVE";
+        bypassStatus.classList.replace('text-amber-400', 'text-cyan-400');
+      }
+    });
+
+    // Source Tabs
+    document.getElementById('src-gen-btn').addEventListener('click', () => switchSource('gen'));
+    document.getElementById('src-mic-btn').addEventListener('click', () => switchSource('mic'));
+    document.getElementById('src-file-btn').addEventListener('click', () => switchSource('file'));
+
+    // Generator Checkboxes
+    ['gen-tone1', 'gen-tone2', 'gen-tone3', 'gen-noise'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => {
+        if (isRunning && currentSourceType === 'gen') setupSynthGenerator();
+      });
+    });
+
+    // Mic Perm Button
+    document.getElementById('mic-perm-btn').addEventListener('click', () => {
+      if (isRunning && currentSourceType === 'mic') setupMicrophone();
+    });
+
+    // File Input
+    const audioFileInput = document.getElementById('audio-file-input');
+    audioFileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        setupAudioFile(e.target.files[0]);
+      }
+    });
+
+    document.getElementById('file-play-btn').addEventListener('click', () => {
+      if (audioFileElement && isRunning) audioFileElement.play();
+    });
+
+    document.getElementById('file-pause-btn').addEventListener('click', () => {
+      if (audioFileElement) audioFileElement.pause();
+    });
+
+    document.getElementById('file-loop').addEventListener('change', (e) => {
+      if (audioFileElement) audioFileElement.loop = e.target.checked;
+    });
+
+    // Filter Buttons
+    document.querySelectorAll('.filter-type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        presetSelect.value = 'custom';
+        setFilterType(btn.dataset.type);
+      });
+    });
+
+    // Sliders
+    cutoffSlider.addEventListener('input', () => { presetSelect.value = 'custom'; updateFilterParams(); });
+    qSlider.addEventListener('input', () => { presetSelect.value = 'custom'; updateFilterParams(); });
+    gainSlider.addEventListener('input', () => { presetSelect.value = 'custom'; updateFilterParams(); });
+
+    // Presets
+    presetSelect.addEventListener('change', (e) => applyPreset(e.target.value));
+
+    // Bootstrapping
+    window.onload = () => {
+      resizeCanvases();
+      updateFilterParams();
+      requestAnimationFrame(drawFFT);
+      requestAnimationFrame(drawScope);
+    };
+  </script>
+</body>
+</html>
